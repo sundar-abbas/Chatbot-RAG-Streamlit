@@ -21,3 +21,4 @@ DocuMind is an intelligent AI-powered assistant that allows users to upload PDF 
 ![alt text](DocuMind.png)
 
 ## 🔗 Live Demo
+[https://chatbot-rag-app-os7ucj4kkopfjappw2hxdff.streamlit.app/]
