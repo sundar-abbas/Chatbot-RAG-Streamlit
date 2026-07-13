@@ -21,6 +21,6 @@ DocuMind is an intelligent AI-powered assistant that allows users to upload PDF 
 ![alt text](DocuMind.png)
 
 ## 📷 Demo ( Video )
-[![DocuMind Demo](DocuMind.png)](https://youtu.be/YOUR_VIDEO_LINK) 
+[▶ Watch the Demo](./DocuMind_Demo.mp4)
 
 ## 🔗 Live Demo
