@@ -11,13 +11,13 @@ from langchain_core.prompts import ChatPromptTemplate # Role Separation for mode
 
 # Phase 3 Imports
 from langchain_community.embeddings import FastEmbedEmbeddings
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 import tempfile 
+import hashlib
 
-
+# API Key
 try:
     groq_api_key=st.secrets["GROQ_API_KEY"]
 except:
@@ -25,7 +25,9 @@ except:
     load_dotenv()
     groq_api_key = os.getenv("GROQ_API_KEY")
 
-st.title("DocuMind ChatBot")
+# Ui
+st.set_page_config(layout="centered" , page_title="DocuMind ChatBot")
+st.title("📃 DocuMind ChatBot")
 st.write("Upload a PDF and ask any question. The AI will answer based on the document's content!")
 
 uploaded_file = st.file_uploader(
@@ -33,22 +35,22 @@ uploaded_file = st.file_uploader(
     type=["pdf"]
 )
 
-if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False , suffix=".pdf") as tmp_file:
-        tmp_file.write(uploaded_file.read())
-        pdf_path = tmp_file.name
 
-# We Will steup a session state to hold all the messages 
+# Session State
 if "messages" not in st.session_state:
     st.session_state.messages = []
+if "current_collection" not in st.session_state:
+    st.session_state.current_collection = None    
+if "vector_store" not in st.session_state:
+    st.session_state.vector_store = None    
     
-# Displaying All The messages    
+# Previous Messages 
 for message in st.session_state.messages:
     st.chat_message(message['role']).markdown(message['content'])
 
 
 @st.cache_resource
-def get_vector_store(pdf_path):
+def get_vector_store(pdf_path , collection_name):
 
     # loadPdf
     loader = PyPDFLoader(pdf_path)
@@ -56,12 +58,16 @@ def get_vector_store(pdf_path):
 
     # Split into chunks
     text_splitters = RecursiveCharacterTextSplitter(
-        chunk_size = 1000,
-        chunk_overlap = 200
+        chunk_size = 800,
+        chunk_overlap = 100
     )
     
     docs = text_splitters.split_documents(documents)
     
+    # Checking if document is empty or not
+    if len(docs) == 0:
+        st.warning("⚠️ No text could be extracted from this PDF. It might be scanned or image‑based.")
+        return None
     
     # create embeddings
     embeddings = FastEmbedEmbeddings(
@@ -71,57 +77,73 @@ def get_vector_store(pdf_path):
     # Vector Store
     vector_store = Chroma.from_documents(
         documents=docs,
-        embedding=embeddings
+        embedding=embeddings,
+        collection_name=collection_name
     )
     
     return vector_store
+
     
-if uploaded_file is not None :
-    if (
-        "current_pdf" not in st.session_state 
-        or st.session_state.current_pdf != uploaded_file.name
-    ):
-        st.cache_resource.clear()
-
-        # Delete old vector store
-        if "vector_store" in st.session_state:
-            del st.session_state.vector_store
-
-        # Clear chat
-        st.session_state.messages = []
+# Handle New PDF Upload 
+if uploaded_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False , suffix=".pdf") as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        pdf_path = tmp_file.name
         
-        # with st.spinner("📚 Creating Vector Store , Please Wait ... "):
-        with st.spinner("📚 Uplaoding PDF , Please Wait ... "):
-            st.session_state.vector_store = get_vector_store(pdf_path)
+    unique_id = hashlib.md5(f"{uploaded_file.name}{uploaded_file.size}".encode()).hexdigest()
+        
+    new_collection = f"pdf_{unique_id}"
+        
+    if st.session_state.current_collection != new_collection:
+        get_vector_store.clear()
             
-        st.session_state.current_pdf = uploaded_file.name
-        st.success("PDF Uploaded SuccessFully! Now You Can Ask Questions.")
+        with st.spinner("📚 Indexing PDF - Please wait ..."):
+            vector_store = get_vector_store(pdf_path , new_collection)
+                
+            
+        if vector_store is None:
+            st.error("❌ Failed to index the PDF. Please use a text‑based PDF or try OCR.")
+            st.stop()    
 
-prompt = st.chat_input("Pass Your prompt here please!")
+        else:
+            st.session_state.vector_store = vector_store
+            st.session_state.current_collection = new_collection
+            st.session_state.messages = []
+            st.success("PDF Uploaded and indexed SuceessFully !")
+           
+
+
+# Chat Input
 
 if uploaded_file is None:
-    st.info("Please Upload A File First.")
+    st.info("📁 Please Upload A File First.")
     st.stop()
     
-
-if prompt:
-    # Now append all the prompts in messages []
+if  st.session_state.vector_store is None:
+    st.error("⚠ No Valid Document indexed. Please upload a text-based PDF.")   
+    st.stop()
     
+prompt = st.chat_input("Ask the question about the document please !")
+    
+    
+# Prompt User Request
+if prompt:
     st.chat_message("user").markdown(prompt)
     st.session_state.messages.append({
         'role':'user',
         'content':prompt
     })
     
-
-   
-    
-    # vector_store = get_vector_store(pdf_path)
     retriever = st.session_state.vector_store.as_retriever(
-        search_kwargs={"k": 3}
-        )
+        search_type="mmr",
+        search_kwargs={"k": 7}
+    )
 
-    groq_system_prompt = ChatPromptTemplate.from_template("""
+    try:
+        docs = retriever.invoke(prompt)
+        context = "\n\n".join([doc.page_content for doc in docs])
+        
+        groq_system_prompt = ChatPromptTemplate.from_template("""
 You are an AI assistant.
 
 Answer the user's question ONLY using the context below.
@@ -135,36 +157,26 @@ Question:
 If the answer is not found in the context, simply say:
 "I couldn't find that information in the document."
 """)
-    
-    model = "llama-3.3-70b-versatile"   
-    chat_groq = ChatGroq(
+           
+        model = "llama-3.3-70b-versatile"   
+        chat_groq = ChatGroq(
         groq_api_key = groq_api_key,
         model=model
-    )
-    
-    
-    
-    chain = groq_system_prompt | chat_groq | StrOutputParser()
-
-   
-
-    try:
-        docs = retriever.invoke(prompt)
-        context = "\n\n".join([doc.page_content for doc in docs])
+        )
+        chain = groq_system_prompt | chat_groq | StrOutputParser()
         
         response = chain.invoke({
             "context":context,
             "user_prompt":prompt
         })
+
         
     except Exception as e:
-        st.error(f"An Error occurred: {str(e)}")
+        st.error(f"❌ Error occurred: {str(e)}")
         response = "Sorry, I encountered an error processing your request."
             
     
-    
-    
-    # response = "I am your Assistant."
+    # Responses
     st.chat_message("assistant").markdown(response)
     st.session_state.messages.append({
         'role':'assistant',
