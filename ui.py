@@ -10,7 +10,7 @@ from langchain_core.output_parsers import StrOutputParser # it converts raw resp
 from langchain_core.prompts import ChatPromptTemplate # Role Separation for model , Dynamic Injection , layouts
 
 # Phase 3 Imports
-
+from langchain_community.embeddings import FastEmbedEmbeddings
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -51,7 +51,6 @@ for message in st.session_state.messages:
 def get_vector_store(pdf_path):
 
     # loadPdf
-    st.write("Loading PDF")
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
@@ -65,8 +64,8 @@ def get_vector_store(pdf_path):
     
     
     # create embeddings
-    embeddings = HuggingFaceEmbeddings(
-        model_name = "sentence-transformers/all-MiniLM-L12-v2"
+    embeddings = FastEmbedEmbeddings(
+        model_name = "BAAI/bge-small-en"
     ) 
     
     # Vector Store
