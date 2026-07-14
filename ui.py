@@ -51,6 +51,7 @@ for message in st.session_state.messages:
 def get_vector_store(pdf_path):
 
     # loadPdf
+    st.write("Loading PDF")
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
