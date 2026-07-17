@@ -16,6 +16,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_chroma import Chroma
 import tempfile 
 import hashlib
+from collections import defaultdict
 
 # API Key
 try:
@@ -44,7 +45,7 @@ if "current_collection" not in st.session_state:
 if "vector_store" not in st.session_state:
     st.session_state.vector_store = None    
     
-# Previous Messages 
+# Previous Messages with sources
 for message in st.session_state.messages:
     st.chat_message(message['role']).markdown(message['content'])
 
@@ -56,10 +57,11 @@ def get_vector_store(pdf_path , collection_name):
     loader = PyPDFLoader(pdf_path)
     documents = loader.load()
 
-    # Split into chunks
+    # Split into chunks ( Better Chunking )
     text_splitters = RecursiveCharacterTextSplitter(
         chunk_size = 800,
-        chunk_overlap = 100
+        chunk_overlap = 100,
+        separators=["\n\n","\n",". ","? ","! "," ",""]
     )
     
     docs = text_splitters.split_documents(documents)
@@ -156,12 +158,15 @@ Question:
 
 If the answer is not found in the context, simply say:
 "I couldn't find that information in the document."
+
+And also you gives the response in the best format that can be any based on user's message.
 """)
            
         model = "llama-3.3-70b-versatile"   
         chat_groq = ChatGroq(
         groq_api_key = groq_api_key,
-        model=model
+        model=model,
+        temperature=0
         )
         chain = groq_system_prompt | chat_groq | StrOutputParser()
         
@@ -178,6 +183,27 @@ If the answer is not found in the context, simply say:
     
     # Responses
     st.chat_message("assistant").markdown(response)
+    
+    # Details ( sources )
+    st.subheader("Sources")
+    with st.expander(f"📖 {uploaded_file.name} "):
+        page_chunks = defaultdict(list)
+        
+        for doc in docs:
+            page = doc.metadata.get("page","N/A")
+
+            if isinstance(page ,int):
+                page+=1
+                
+            if doc.page_content not in page_chunks[page]:
+                page_chunks[page].append(doc.page_content)    
+        
+        for page in sorted(page_chunks):
+            st.markdown(f"📃 Page :  {page}")
+            for chunk in page_chunks[page]:
+                st.markdown(chunk)
+                st.divider()
+    
     st.session_state.messages.append({
         'role':'assistant',
         'content':response
