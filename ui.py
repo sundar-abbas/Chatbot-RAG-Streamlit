@@ -162,7 +162,7 @@ If the answer is not found in the context, simply say:
 And also you gives the response in the best format that can be any based on user's message.
 """)
            
-        model = "llama-3.3-70b-versatile"   
+        model = "openai/gpt-oss-120b"   
         chat_groq = ChatGroq(
         groq_api_key = groq_api_key,
         model=model,
@@ -184,25 +184,25 @@ And also you gives the response in the best format that can be any based on user
     # Responses
     st.chat_message("assistant").markdown(response)
     
-    # Details ( sources )
-    st.subheader("Sources")
-    with st.expander(f"📖 {uploaded_file.name} "):
-        page_chunks = defaultdict(list)
+    # # Details ( sources )
+    # st.subheader("Sources")
+    # with st.expander(f"📖 {uploaded_file.name} "):
+    #     page_chunks = defaultdict(list)
         
-        for doc in docs:
-            page = doc.metadata.get("page","N/A")
+    #     for doc in docs:
+    #         page = doc.metadata.get("page","N/A")
 
-            if isinstance(page ,int):
-                page+=1
+    #         if isinstance(page ,int):
+    #             page+=1
                 
-            if doc.page_content not in page_chunks[page]:
-                page_chunks[page].append(doc.page_content)    
+    #         if doc.page_content not in page_chunks[page]:
+    #             page_chunks[page].append(doc.page_content)    
         
-        for page in sorted(page_chunks):
-            st.markdown(f"📃 Page :  {page}")
-            for chunk in page_chunks[page]:
-                st.markdown(chunk)
-                st.divider()
+    #     for page in sorted(page_chunks):
+    #         st.markdown(f"📃 Page :  {page}")
+    #         for chunk in page_chunks[page]:
+    #             st.markdown(chunk)
+    #             st.divider()
     
     st.session_state.messages.append({
         'role':'assistant',
